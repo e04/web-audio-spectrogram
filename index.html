@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>web-audio-spectrogram</title>
+</head>
+<body style="margin: 0;background-color: gray;">
+<div id="tool" style="position: absolute;">
+    <button onclick="start()">Start</button>
+
+    <label>
+        FFT Size
+        <input type="range" id="size"
+               min="10" max="15" value="12">
+    </label>
+</div>
+<canvas style="display: block;"></canvas>
+<script>
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const start = () => {
+        const fftSize = document.getElementById('size').value;
+        document.getElementById('tool').remove();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 2 ** fftSize;
+        analyser.smoothingTimeConstant = 0;
+
+        const height = Math.min(window.innerHeight, analyser.frequencyBinCount);
+        const width = window.innerWidth;
+
+        canvas.height = height;
+        canvas.width = width;
+
+        navigator.mediaDevices.getUserMedia({audio: true})
+            .then(stream => {
+                const sourceNode = audioCtx.createMediaStreamSource(stream);
+                sourceNode.connect(analyser);
+            })
+
+        const binCount = analyser.frequencyBinCount;
+        const bufferLength = width;
+        const buffer = new Uint8Array(binCount);
+        const memory = new Uint8Array(binCount * bufferLength);
+
+        const imageData = ctx.createImageData(bufferLength, binCount);
+
+        const sync = () => {
+            analyser.getByteFrequencyData(buffer);
+
+            for (let i = 0; i < memory.length; i++) {
+                memory[i] = memory[i + binCount];
+            }
+
+            for (let i = 0; i < binCount; i++) {
+                memory[i + (memory.length - binCount)] = buffer[i];
+            }
+
+            for (let x = 0; x < bufferLength; x++) {
+                for (let y = 0; y < binCount; y++) {
+                    const value = memory[(binCount * x) + y];
+                    const index = (x + (height - y) * bufferLength) * 4;
+
+                    imageData.data[index] = value;     // R
+                    imageData.data[index + 1] = value; // G
+                    imageData.data[index + 2] = value; // B
+                    imageData.data[index + 3] = 255;          // A
+                }
+            }
+        }
+
+        const draw = () => {
+            ctx.putImageData(imageData, 0, 0);
+            requestAnimationFrame(draw);
+        }
+
+        setInterval(sync, 0);
+        draw();
+    }
+</script>
+</body>
+</html>
